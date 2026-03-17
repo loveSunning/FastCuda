@@ -1,0 +1,3 @@
+#pragma once
+
+#define FASTCUDA_VERSION "@PROJECT_VERSION@"

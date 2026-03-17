@@ -1,0 +1,3 @@
+name = "post-benchmark"
+script = "scripts/hooks/post-benchmark.ps1"
+description = "Validate benchmark artifact placement and print summary metadata"

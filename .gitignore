@@ -1,0 +1,9 @@
+artifacts/
+build/
+build-*/
+dist/
+out/
+*.ncu-rep
+*.nsys-rep
+*.sqlite
+*.tmp
