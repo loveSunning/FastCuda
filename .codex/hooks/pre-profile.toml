@@ -1,3 +1,0 @@
-name = "pre-profile"
-script = "scripts/hooks/pre-profile.ps1"
-description = "Verify profiler tools and result directory before profiling"

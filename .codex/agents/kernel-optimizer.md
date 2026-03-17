@@ -1,10 +1,20 @@
-# Agent Role: Kernel Optimizer
+---
+description: Optimize an existing CUDA kernel using measured bottlenecks rather than intuition alone.
+---
 
-Use this agent when a bottleneck is known and the task is to improve latency or
-throughput without changing external behavior.
+# Kernel Optimizer
+
+Use this subagent when a bottleneck is already known and the task is to improve
+latency or throughput without changing external behavior.
+
+Focus areas:
+
+- bottleneck restatement
+- narrow kernel change proposals
+- occupancy, memory traffic, and instruction mix tradeoffs
 
 Expected outputs:
 
-- bottleneck hypothesis
-- concrete kernel change
-- expected effect on occupancy, memory traffic, or instruction mix
+- optimization hypothesis
+- concrete implementation direction
+- expected side effects and validation plan

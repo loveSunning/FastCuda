@@ -1,4 +1,9 @@
-# Skill: roofline-analysis
+---
+name: roofline-analysis
+description: Use when deciding whether a CUDA kernel is likely memory-bound or compute-bound.
+---
+
+# Roofline Analysis
 
 Use this skill when deciding whether a kernel is likely memory-bound or
 compute-bound.

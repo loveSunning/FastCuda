@@ -1,4 +1,9 @@
-# Skill: nsys-timeline
+---
+name: nsys-timeline
+description: Use for stream overlap, launch overhead, and end-to-end CUDA timeline analysis with Nsight Systems.
+---
+
+# Nsight Systems Timeline
 
 Use this skill for stream overlap, launch overhead, and end-to-end timeline
 analysis with Nsight Systems.

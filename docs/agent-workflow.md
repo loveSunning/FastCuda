@@ -3,40 +3,39 @@
 ## Control Flow
 
 ```text
-instructions -> prompt -> agent role -> skill bundle -> tool script -> hook -> artifact
+AGENTS.md -> .codex/config.toml -> subagent or skill -> script wrapper -> artifact
 ```
 
 ## Recommended Task Recipes
 
 ### 1. New GEMM Kernel
 
-- load `project-scope.md`, `cuda-rules.md`, `perf-rules.md`
-- use prompt `implement-gemm-kernel.md`
-- assign role `kernel-architect`
-- add skills `gemm-kernel-design` and `benchmark-harness`
-- run hook `pre-benchmark` before serious measurement
+- read `AGENTS.md`
+- use subagent `kernel-architect` if design decomposition is non-trivial
+- use skills `gemm-kernel-design` and `benchmark-harness`
+- use the brief in `docs/prompts/implement-gemm-kernel.md` if a reusable prompt starter helps
 
 ### 2. New FlashAttention Kernel
 
-- load the instruction set
-- use prompt `implement-flashattention-kernel.md`
-- assign role `kernel-architect`
-- add skills `flashattention-kernel-design` and `benchmark-harness`
+- read `AGENTS.md`
+- use subagent `kernel-architect`
+- use skills `flashattention-kernel-design` and `benchmark-harness`
+- use the brief in `docs/prompts/implement-flashattention-kernel.md`
 
 ### 3. Perf Regression
 
-- use prompt `optimize-kernel.md`
-- assign role `perf-analyst` first
+- use subagent `perf-analyst` first
 - add skills `ncu-profiling` and `roofline-analysis`
-- use `nsys-timeline` only if overlap or launch behavior is suspicious
+- use `nsys-timeline` only for overlap, stream, or launch questions
+- use the brief in `docs/prompts/optimize-kernel.md` if needed
 
-### 4. Machine Setup or Failure Diagnosis
+### 4. Machine Setup Or Failure Diagnosis
 
-- use prompt `investigate-environment.md`
-- assign role `env-investigator`
+- use subagent `env-investigator`
 - add skill `cuda-env-audit`
+- use the brief in `docs/prompts/investigate-environment.md`
 
-## Rules of Engagement
+## Rules Of Engagement
 
 - do not skip baseline benchmarking
 - do not mix environment debugging with kernel optimization unless required

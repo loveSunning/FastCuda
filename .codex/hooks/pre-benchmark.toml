@@ -1,3 +1,0 @@
-name = "pre-benchmark"
-script = "scripts/hooks/pre-benchmark.ps1"
-description = "Capture environment snapshot before benchmark execution"

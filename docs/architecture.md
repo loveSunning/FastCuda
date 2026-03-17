@@ -8,8 +8,8 @@ target kernels are GEMM and FlashAttention. The architecture optimizes for:
 - repeatable kernel iteration
 - explicit performance baselines
 - low-friction profiling
-- stable agent behavior
-- reusable prompts and skills
+- stable Codex behavior
+- reusable CUDA skills and prompt briefs
 
 ## Build And Platform Targets
 
@@ -22,99 +22,55 @@ target kernels are GEMM and FlashAttention. The architecture optimizes for:
   - RTX 4090 -> compute capability 8.9 -> `89`
   - RTX 5060 -> compute capability 12.0 -> `120`
 
+## Codex Control Plane
+
+FastCuda follows Codex's official configuration surfaces:
+
+- `AGENTS.md`
+  - project instructions, workflow, and durable constraints
+- `.codex/config.toml`
+  - project-scoped runtime configuration
+- `.codex/rules/*.rules`
+  - approval and command rules
+- `.codex/agents/*.md`
+  - custom subagents
+- `.codex/skills/*/SKILL.md`
+  - project skills
+
+The following remain ordinary project assets rather than Codex config modules:
+
+- `docs/prompts/`
+- `scripts/`
+- `configs/`
+- `templates/`
+
 ## Design Principles
 
-### 1. Stable execution surfaces
+### 1. Codex config stays official
 
-Agents should not invent ad hoc shell commands when a reusable script can be
-used instead. Benchmarking, environment inspection, and profiling should route
-through `scripts/`.
+Repository agent behavior should live in `AGENTS.md`, `.codex/config.toml`,
+`.codex/rules/`, `.codex/agents/`, and `.codex/skills/`. Do not add shadow
+control planes or custom manifests for the same responsibility.
 
-### 2. Rules before prompts
+### 2. Execution goes through scripts
 
-Instructions define non-negotiable behavior. Prompts are task entrypoints. A
-prompt may be swapped; the rules should remain stable.
+Benchmarking, environment inspection, and profiling should route through
+`scripts/` instead of ad hoc shell snippets whenever possible.
 
-### 3. Skills are workflow modules
-
-Each skill owns a repeatable sub-problem, such as:
-
-- bringing up a benchmark harness
-- profiling with Nsight tools
-- checking occupancy or memory bandwidth assumptions
-
-### 4. Hooks enforce hygiene
-
-Hooks are used for lightweight guardrails:
-
-- snapshot environment before a benchmark
-- verify benchmark output path conventions
-- capture metadata after profiling
-
-### 5. Artifact-first performance work
+### 3. Performance work is artifact-first
 
 Performance claims should produce files, not only terminal output:
 
 - environment snapshots
-- benchmark JSON/CSV
+- benchmark JSON
 - profiler output locations
 - optimization notes
 
-## Control Plane
+### 4. Device tiers are explicit
 
-### `.codex/project.toml`
-
-Central manifest that documents:
-
-- default instructions
-- available prompts
-- custom agents
-- registered skills
-- hook entrypoints
-- tool scripts
-
-This is the top-level index for both humans and agents.
-
-### `.codex/instructions/`
-
-Contains durable operating rules:
-
-- project scope
-- CUDA coding rules
-- benchmarking and profiling rules
-- artifact conventions
-
-### `.codex/prompts/`
-
-Task-focused prompt files that agents can use as starting points:
-
-- operator implementation
-- performance optimization
-- benchmark analysis
-- environment investigation
-
-### `.codex/agents/`
-
-Custom agent role definitions. These are not model-specific internals; they are
-project-facing role contracts. Example roles:
-
-- kernel-architect
-- kernel-optimizer
-- perf-analyst
-- env-investigator
-
-### `.codex/skills/`
-
-Reusable workflow packs with local instructions:
-
-- benchmark design
-- profiler runs
-- roofline-style analysis
-- CUDA environment checks
-
-### `.codex/hooks/`
-
-Hook configuration and mapping to executable scripts in `scripts/hooks/`.
+RTX 4090 and RTX 5060 are treated as separate benchmark tiers. Kernel behavior,
+shape presets, and memory pressure should be interpreted against the active
+device profile.
 
 ## Execution Plane
 
@@ -137,26 +93,23 @@ Stable wrappers for:
 - Nsight Systems
 - result directory creation
 
+### `scripts/hooks/`
+
+Project hook-like helper scripts for:
+
+- pre-benchmark environment capture
+- benchmark artifact verification
+- profiler tool checks
+
 ### `configs/`
 
-Machine-readable configs, benchmark presets, and output conventions.
-
-### `templates/`
-
-Reusable templates for notes, benchmark specs, and optimization reports.
+Machine-readable configs, benchmark presets, and device profiles.
 
 ## Recommended Workflow
 
-1. Run environment probe.
-2. Establish or refresh the baseline benchmark.
-3. Implement a focused kernel change.
-4. Re-run benchmark with metadata capture.
-5. Profile only after a measurable change or a hypothesis mismatch.
-6. Write optimization notes against data, not intuition alone.
-
-## Future Expansion
-
-- `src/` for kernels and harness code
-- `benchmarks/` for operator-specific runners
-- `results/` for benchmark and profiling artifacts
-- `experiments/` for temporary tuning branches
+1. Read `AGENTS.md`.
+2. Check `.codex/config.toml` and the relevant skills or subagents.
+3. Run environment probe if the machine state is uncertain.
+4. Establish or refresh the benchmark baseline.
+5. Implement a narrow kernel change.
+6. Re-run benchmark and profile only when the data calls for it.

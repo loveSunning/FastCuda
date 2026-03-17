@@ -1,6 +1,7 @@
 # Prompt Files
 
-Prompt files are task entrypoints, not global policy.
+Prompt files are reusable task briefs for FastCuda work. They are regular
+project documents, not Codex configuration modules.
 
 Recommended mapping:
 

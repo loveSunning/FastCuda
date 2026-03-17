@@ -1,14 +1,19 @@
-# Skill: gemm-kernel-design
+---
+name: gemm-kernel-design
+description: Use when designing or reviewing handwritten CUDA GEMM kernels.
+---
+
+# GEMM Kernel Design
 
 Use this skill when building or reviewing GEMM kernels.
 
 ## Checklist
 
-- state matrix layout
-- state tile sizes
-- state threadblock and warp mapping
-- state accumulation precision
-- state edge handling
+- matrix layout assumptions
+- tile sizes
+- threadblock and warp mapping
+- accumulation precision
+- edge handling
 
 ## Focus
 

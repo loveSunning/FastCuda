@@ -1,4 +1,9 @@
-# Skill: flashattention-kernel-design
+---
+name: flashattention-kernel-design
+description: Use when designing or reviewing handwritten CUDA FlashAttention kernels.
+---
+
+# FlashAttention Kernel Design
 
 Use this skill when building or reviewing FlashAttention kernels.
 
