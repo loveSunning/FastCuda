@@ -18,6 +18,12 @@ development, with a near-term focus on:
 - default CUDA architectures: `89;120`
   - `89` for GeForce RTX 4090
   - `120` for GeForce RTX 5060
+- default device tiers:
+  - RTX 4090: 24 GB
+  - RTX 5060: 8 GB
+- default device tiers:
+  - RTX 4090: 24 GB
+  - RTX 5060: 8 GB
 
 The repository is organized as an "engineering operating system" for CUDA
 kernel work. It separates:

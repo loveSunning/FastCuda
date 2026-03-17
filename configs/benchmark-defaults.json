@@ -3,5 +3,6 @@
   "timed_iters": 100,
   "output_dir": "artifacts/benchmarks",
   "dtypes": ["fp16", "bf16", "fp32"],
-  "operators": ["gemm", "flashattention"]
+  "operators": ["gemm", "flashattention"],
+  "device_profiles": ["rtx4090", "rtx5060"]
 }

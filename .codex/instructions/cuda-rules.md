@@ -35,3 +35,5 @@
 - do not compare kernels across different shapes without naming shapes
 - always record warmup, iteration count, and dtype
 - always record GPU model and clock mode if known
+- treat RTX 4090 and RTX 5060 as separate benchmark tiers because both compute
+  capability and memory capacity differ materially

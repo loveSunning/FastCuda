@@ -1,0 +1,16 @@
+{
+  "rtx4090": {
+    "gpu_name": "GeForce RTX 4090",
+    "compute_capability": "8.9",
+    "cuda_architecture": "89",
+    "memory_gb": 24,
+    "notes": "High-memory Ada target for larger GEMM and FlashAttention shapes."
+  },
+  "rtx5060": {
+    "gpu_name": "GeForce RTX 5060",
+    "compute_capability": "12.0",
+    "cuda_architecture": "120",
+    "memory_gb": 8,
+    "notes": "Smaller-memory Blackwell target for tighter benchmark presets and memory-aware tuning."
+  }
+}
