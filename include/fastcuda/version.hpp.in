@@ -1,0 +1,11 @@
+/*
+ * Copyright 2026 FastCuda contributors
+ * Licensed under the Apache License, Version 2.0
+ */
+
+#pragma once
+
+#define FASTCUDA_VERSION       "@PROJECT_VERSION@"
+#define FASTCUDA_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define FASTCUDA_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define FASTCUDA_VERSION_PATCH @PROJECT_VERSION_PATCH@

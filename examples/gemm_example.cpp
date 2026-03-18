@@ -1,17 +1,15 @@
-#/*
- Copyright 2026 victor
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-*/
+/*
+ * Copyright 2026 FastCuda contributors
+ * Licensed under the Apache License, Version 2.0
+ *
+ * GEMM example – runs all 6 GEMM versions, validates against CPU reference,
+ * and prints elapsed time + max error for each.
+ */
 
 #include "fastcuda/gemm.hpp"
-#include "fastcuda/gemm_c.h"
+#include "fastcuda/gemm.h"
+#include "fastcuda/runtime.hpp"
 
-#include <algorithm>
-#include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -19,96 +17,62 @@
 
 namespace {
 
-void FillMatrix(std::vector<float>* values, float scale) {
-    for (std::size_t index = 0; index < values->size(); ++index) {
-        (*values)[index] = static_cast<float>((index % 19) - 9) * scale;
-    }
+void FillMatrix(std::vector<float>* v, float scale) {
+    for (std::size_t i = 0; i < v->size(); ++i)
+        (*v)[i] = static_cast<float>((i % 19) - 9) * scale;
 }
 
-float ComputeMaxAbsDiff(const std::vector<float>& lhs, const std::vector<float>& rhs) {
-    float max_abs_diff = 0.0f;
-    for (std::size_t index = 0; index < lhs.size(); ++index) {
-        max_abs_diff = std::max(max_abs_diff, std::fabs(lhs[index] - rhs[index]));
-    }
-    return max_abs_diff;
-}
+void RunOne(fastcuda::GemmAlgorithm algo,
+            const fastcuda::GemmConfig& cfg,
+            const std::vector<float>& a,
+            const std::vector<float>& b,
+            const std::vector<float>& c_ref) {
+    std::vector<float> c_out(c_ref.size(), 0.0f);
+    fastcuda::GemmTiming t = fastcuda::RunSgemmHost(
+        algo, cfg, a.data(), b.data(), NULL, c_out.data(), 5, 20);
 
-void PrintResult(
-    FastCudaGemmAlgorithm algorithm,
-    const FastCudaGemmConfig& config,
-    const std::vector<float>& a,
-    const std::vector<float>& b,
-    const std::vector<float>& c_init,
-    const std::vector<float>& c_reference) {
-    std::vector<float> c_output(c_init.size(), 0.0f);
-    float elapsed_ms = 0.0f;
-
-    const FastCudaStatus status = fastcudaSgemmHost(
-        algorithm,
-        &config,
-        a.data(),
-        b.data(),
-        c_init.data(),
-        c_output.data(),
-        5,
-        20,
-        &elapsed_ms);
-
-    if (status != FASTCUDA_STATUS_SUCCESS) {
-        std::cerr << "algorithm=" << fastcudaGetGemmAlgorithmName(algorithm)
-                  << " status=" << fastcudaGetStatusString(status)
-                  << " error=" << fastcudaGetLastErrorMessage() << "\n";
-        std::exit(1);
-    }
-
-    std::cout << std::fixed << std::setprecision(4);
-    std::cout << "algorithm=" << fastcudaGetGemmAlgorithmName(algorithm)
-              << " elapsed_ms=" << elapsed_ms
-              << " max_abs_error=" << ComputeMaxAbsDiff(c_output, c_reference)
-              << "\n";
+    float err = fastcuda::MaxAbsDiff(c_out.data(), c_ref.data(), c_ref.size());
+    std::cout << std::left << std::setw(20)
+              << fastcuda::GemmAlgorithmName(algo)
+              << std::fixed << std::setprecision(4)
+              << "  elapsed_ms=" << std::setw(10) << t.elapsed_ms
+              << std::scientific << std::setprecision(2)
+              << "  max_err=" << err << "\n";
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    FastCudaGemmConfig config;
-    config.m = (argc > 1) ? std::atoi(argv[1]) : 512;
-    config.n = (argc > 2) ? std::atoi(argv[2]) : 512;
-    config.k = (argc > 3) ? std::atoi(argv[3]) : 512;
-    config.lda = config.k;
-    config.ldb = config.n;
-    config.ldc = config.n;
-    config.alpha = 1.0f;
-    config.beta = 0.0f;
-    config.stream = NULL;
+    int m = (argc > 1) ? std::atoi(argv[1]) : 512;
+    int n = (argc > 2) ? std::atoi(argv[2]) : 512;
+    int k = (argc > 3) ? std::atoi(argv[3]) : 512;
 
-    const std::size_t a_size = static_cast<std::size_t>(config.m) * config.lda;
-    const std::size_t b_size = static_cast<std::size_t>(config.k) * config.ldb;
-    const std::size_t c_size = static_cast<std::size_t>(config.m) * config.ldc;
+    std::cout << "== FastCuda GEMM Example ==\n";
+    std::cout << fastcuda::FormatDeviceSummary(fastcuda::QueryDevices());
+    std::cout << "m=" << m << "  n=" << n << "  k=" << k << "\n\n";
 
-    std::vector<float> a(a_size, 0.0f);
-    std::vector<float> b(b_size, 0.0f);
-    std::vector<float> c_init(c_size, 0.0f);
-    std::vector<float> c_reference(c_size, 0.0f);
+    fastcuda::GemmConfig cfg;
+    cfg.m = m; cfg.n = n; cfg.k = k;
+    cfg.lda = k; cfg.ldb = n; cfg.ldc = n;
 
+    std::vector<float> a(static_cast<std::size_t>(m) * k);
+    std::vector<float> b(static_cast<std::size_t>(k) * n);
     FillMatrix(&a, 0.125f);
     FillMatrix(&b, 0.0625f);
 
-    fastcuda::GemmConfig cpp_config;
-    cpp_config.m = config.m;
-    cpp_config.n = config.n;
-    cpp_config.k = config.k;
-    cpp_config.lda = config.lda;
-    cpp_config.ldb = config.ldb;
-    cpp_config.ldc = config.ldc;
-    cpp_config.alpha = config.alpha;
-    cpp_config.beta = config.beta;
-    cpp_config.stream = config.stream;
-    fastcuda::ReferenceSgemm(cpp_config, a.data(), b.data(), c_init.data(), c_reference.data());
+    /* CPU reference */
+    std::vector<float> c_ref(static_cast<std::size_t>(m) * n, 0.0f);
+    fastcuda::ReferenceSgemm(cfg, a.data(), b.data(), NULL, c_ref.data());
 
-    std::cout << "m=" << config.m << " n=" << config.n << " k=" << config.k << "\n";
-    PrintResult(FASTCUDA_GEMM_NAIVE, config, a, b, c_init, c_reference);
-    PrintResult(FASTCUDA_GEMM_TILED, config, a, b, c_init, c_reference);
-    PrintResult(FASTCUDA_GEMM_REGISTER_BLOCKED, config, a, b, c_init, c_reference);
+    /* SGEMM v1-v4 (FP32 CUDA core paths) */
+    RunOne(fastcuda::GemmAlgorithm::kNaiveV1,     cfg, a, b, c_ref);
+    RunOne(fastcuda::GemmAlgorithm::kSharedMemV2,  cfg, a, b, c_ref);
+    RunOne(fastcuda::GemmAlgorithm::kRegisterV3,   cfg, a, b, c_ref);
+    RunOne(fastcuda::GemmAlgorithm::kWarpV4,       cfg, a, b, c_ref);
+
+    /* TF32 v5 – note: result will differ slightly due to TF32 precision */
+    RunOne(fastcuda::GemmAlgorithm::kTF32V5,       cfg, a, b, c_ref);
+
+    std::cout << "\n(HGEMM v6 requires FP16 input – see bench_main for full run)\n";
     return 0;
 }

@@ -2,12 +2,14 @@
 
 ## Goals
 
-This workspace is designed for direct CUDA C++ operator development. The first
-target kernels are GEMM and FlashAttention. The architecture optimizes for:
+This workspace is designed for direct CUDA C++ operator development. It ships
+six progressive GEMM kernels, eight parallel reduction kernels, and a cuBLAS
+comparison benchmark. The architecture optimizes for:
 
-- repeatable kernel iteration
-- explicit performance baselines
+- repeatable kernel iteration with progressive optimization
+- explicit performance baselines and cuBLAS comparison
 - low-friction profiling
+- C / C++ / Python interface surface
 - stable Codex behavior
 - reusable CUDA skills and prompt briefs
 
@@ -113,3 +115,59 @@ Machine-readable configs, benchmark presets, and device profiles.
 4. Establish or refresh the benchmark baseline.
 5. Implement a narrow kernel change.
 6. Re-run benchmark and profile only when the data calls for it.
+
+## Source Layout
+
+```text
+include/fastcuda/      Public C/C++ headers (installed)
+  export.h             DLL export/import macros
+  types.h              Status enum, error helpers (C)
+  gemm.h / gemm.hpp    GEMM API (C / C++)
+  reduce.h / reduce.hpp Reduce API (C / C++)
+  runtime.h / runtime.hpp Device query (C / C++)
+  fastcuda.h / fastcuda.hpp Umbrella headers
+  version.hpp.in       Version template (cmake configure_file)
+
+src/common/            Internal helpers
+  cuda_check.h         CheckCuda, CeilDiv
+
+src/gemm/              GEMM kernels + dispatch
+  gemm_v1_naive.cu     V1 – one thread per element
+  gemm_v2_shared.cu    V2 – shared-memory tiling (32×32)
+  gemm_v3_register.cu  V3 – register blocking + float4
+  gemm_v4_warp.cu      V4 – double-buffered prefetch
+  gemm_v5_tf32.cu      V5 – TF32 Tensor Core (wmma)
+  gemm_v6_hgemm.cu     V6 – FP16 HGEMM (wmma)
+  gemm_api.cu          Public API dispatch, C wrappers
+  gemm_internal.h      Internal launch declarations
+
+src/reduce/            Reduce kernels + dispatch
+  reduce_v0–v7_*.cu    8 progressive reduction kernels
+  reduce_api.cu        Public API dispatch, C wrappers
+  reduce_internal.h    Internal launch declarations
+
+src/runtime/           Device query
+  runtime.cu           QueryDevices, C wrappers
+
+python/                Python bindings (pybind11)
+  fastcuda_python.cpp  Module definition
+  setup.py             Package metadata
+
+examples/              Standalone executables
+  gemm_example.cpp     V1–V5 SGEMM + CPU reference
+  reduce_example.cpp   V0–V7 reduce + CPU reference
+
+benchmarks/            Performance measurement
+  bench_main.cu        GEMM (vs cuBLAS) + Reduce bandwidth
+```
+
+## Operator Inventory
+
+| Operator | Versions | Status |
+|----------|----------|--------|
+| GEMM | V1–V6 (6 kernels) | Implemented |
+| Reduce | V0–V7 (8 kernels) | Implemented |
+| GEMV | — | Planned |
+| SpMM | — | Planned |
+| SpMV | — | Planned |
+| FlashAttention | — | Planned |

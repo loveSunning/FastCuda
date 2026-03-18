@@ -4,51 +4,18 @@
 
 [English README](README.md)
 
-FastCuda 是一个面向现代 NVIDIA GPU 的轻量 CUDA 内核工作区，用于手写算子开发、基准测试和性能分析。
-
-当前仓库已经提供可直接使用的 SGEMM 库，包含三种实现层级、一个 benchmark 可执行程序，以及一个最小示例程序。
+FastCuda 是一个面向现代 NVIDIA GPU 的企业级 CUDA 算子库，用于手写内核开发、基准测试和性能分析。包含六种渐进式 GEMM 实现（从朴素到 Tensor Core HGEMM）、八种并行归约变体、cuBLAS 对比基准测试，以及 C / C++ / Python 接口。
 
 ## 你能得到什么
 
-- 一个库里集成三种 SGEMM 路径：`naive`、`tiled_shared`、`register_blocked`
-- 同时提供 C++ API 和 C ABI，便于下游项目集成
-- 用于重复对比内核性能的 benchmark 入口
-- 用于快速检查环境的设备查询工具
-- 基于 CMake 的 Windows / Linux 构建方式
-- 默认面向 RTX 4090（`sm_89`）和 RTX 5060（`sm_120`）
-
-## 效果预览
-
-### 示例程序输出
-
-```text
-m=256 n=256 k=256
-algorithm=naive elapsed_ms=0.0340 max_abs_error=0.0000
-algorithm=tiled_shared elapsed_ms=0.0359 max_abs_error=0.0000
-algorithm=register_blocked elapsed_ms=0.0295 max_abs_error=0.0000
-```
-
-### Benchmark 输出
-
-```text
-operator=gemm
-kernel=all
-shape=m=256,n=256,k=256
-requested_dtype=fp32
-effective_dtype=fp32
-device_count=1
-device[0] name=NVIDIA GeForce RTX 5060 cc=12.0 global_mem_bytes=8546484224 sms=30
-algorithm=naive
-elapsed_ms=0.0336
-max_abs_error=0.000000e+00
-algorithm=tiled_shared
-elapsed_ms=0.0359
-max_abs_error=0.000000e+00
-algorithm=register_blocked
-elapsed_ms=0.0295
-max_abs_error=0.000000e+00
-status=ok
-```
+| 类别 | 内容 |
+|------|------|
+| **GEMM** | 6 个内核：V1 朴素 → V2 共享内存 → V3 寄存器分块 → V4 双缓冲 → V5 TF32 Tensor Core → V6 FP16 HGEMM |
+| **Reduce** | 8 个内核：V0 基线 → V1 无分歧 → V2 无bank冲突 → V3 加载时累加 → V4 展开末warp → V5 完全展开 → V6 多元素累加 → V7 Warp Shuffle |
+| **接口** | C 头文件、C++ 头文件、Python (pybind11) 绑定 |
+| **基准测试** | 内置 cuBLAS 对比，输出 GFLOPS / 带宽 |
+| **构建** | CMake，Windows + Linux，动态库 & 静态库 |
+| **目标设备** | RTX 4090 (`sm_89`)、RTX 5060 (`sm_120`) |
 
 ## 快速开始
 
@@ -57,7 +24,7 @@ status=ok
 Windows：
 
 ```powershell
-cmd /c ""C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" && cmake -S . -B build -G "Visual Studio 17 2022" -A x64"
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 ```
 
 Linux：
@@ -68,118 +35,139 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
 ### 2. 构建
 
-Windows：
-
-```powershell
-cmake --build build --config Release
-```
-
-Linux：
-
 ```bash
-cmake --build build -j
+cmake --build build --config Release -j
 ```
 
 ### 3. 运行
 
-运行示例程序：
+```bash
+# GEMM 示例（运行 V1–V5 并与 CPU 参考实现对比）
+./build/Release/fastcuda_gemm_example 512 512 512
 
-```powershell
-.\build\Release\fastcuda_gemm_example.exe 512 512 512
+# Reduce 示例（运行 V0–V7）
+./build/Release/fastcuda_reduce_example 1048576
+
+# 基准测试（GEMM vs cuBLAS + 全部 reduce 版本）
+./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024
+./build/Release/fastcuda_bench reduce all n=1048576
 ```
 
-运行 benchmark 包装脚本：
+### 4. Python（可选）
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/perf/run-benchmark.ps1 -Operator gemm -Kernel all -Shape m=1024,n=1024,k=1024 -DType fp32
+```bash
+cmake -S . -B build -DFASTCUDA_BUILD_PYTHON=ON
+cmake --build build --config Release -j
+cd python && pip install -e .
 ```
 
-## 核心特点
+```python
+import fastcuda
+info = fastcuda.query_devices()
+C = fastcuda.sgemm(A, B, algorithm=fastcuda.GemmAlgorithm.REGISTER_BLOCKED_V3)
+total = fastcuda.reduce_sum(data, algorithm=fastcuda.ReduceAlgorithm.SHUFFLE_V7)
+```
 
-- 手写 CUDA SGEMM 内核，分层清晰，便于学习和演进
-- 同时暴露 C++ 和 C 接口，适合集成到其他程序中
-- 通过 `scripts/perf/run-benchmark.ps1` 提供可重复 benchmark 流程
-- 通过 `scripts/env/probe-env.ps1` 提供环境探测能力
-- 提供 Nsight Compute / Nsight Systems 的分析入口
-- 安装结果统一输出到 `bin`、`lib` 和 `include/fastcuda`
+## GEMM 实现
 
-## 已实现功能
+| 版本 | 策略 | 分块/线程块 | 精度 |
+|------|------|------------|------|
+| V1 | 朴素（1线程→1元素） | 16×16 | FP32 |
+| V2 | 共享内存分块 | 32×32, TK=32 | FP32 |
+| V3 | 寄存器分块 + float4 | BM=64, BN=64, TM=4, TN=4 | FP32 |
+| V4 | 双缓冲共享内存 + 预取 | BM=128, BN=128, TM=8, TN=8 | FP32 |
+| V5 | Tensor Core (wmma, TF32) | 16×16×8 fragments | TF32→FP32 |
+| V6 | Tensor Core HGEMM | 16×16×16 fragments | FP16→FP32 |
 
-### SGEMM 算法层级
+详见 [docs/gemm_optimization.zh-CN.md](docs/gemm_optimization.zh-CN.md)。
 
-- `naive`：每个线程负责一个输出元素
-- `tiled_shared`：基于 `16x16x16` 的共享内存分块实现
-- `register_blocked`：基于 `64x64x16` 宏块和每线程 `4x4` 寄存器块的实现
+## Reduce 实现
 
-### 对外头文件
+| 版本 | 关键技术 |
+|------|---------|
+| V0 | 基线交错寻址（有 warp 分歧） |
+| V1 | 步长索引（消除 warp 分歧） |
+| V2 | 顺序寻址（消除 bank 冲突） |
+| V3 | 加载时累加（块数减半） |
+| V4 | 展开最后一个 warp（节省屏障指令） |
+| V5 | 完全模板展开 |
+| V6 | 多元素累加（每线程 8×） |
+| V7 | Warp shuffle (`__shfl_down_sync`) |
 
-- `fastcuda/gemm.hpp`：C++ SGEMM API
-- `fastcuda/gemm_c.h`：供外部调用的 C ABI
-- `fastcuda/runtime.hpp`：设备发现和设备摘要工具
+详见 [docs/reduce_optimization.zh-CN.md](docs/reduce_optimization.zh-CN.md)。
 
-### 构建产物
+## 对外头文件
 
-- 动态库：Windows 下为 `fastcuda.dll`，Linux 下为 `libfastcuda.so`
-- 静态库：`fastcuda_static`
-- Benchmark 可执行程序：`fastcuda_bench`
-- 示例程序：`fastcuda_gemm_example`
+| 头文件 | 语言 | 说明 |
+|--------|------|------|
+| `fastcuda/gemm.h` | C | SGEMM / TF32 / HGEMM 函数 |
+| `fastcuda/gemm.hpp` | C++ | GEMM 命名空间 API |
+| `fastcuda/reduce.h` | C | Reduce sum 函数 |
+| `fastcuda/reduce.hpp` | C++ | Reduce 命名空间 API |
+| `fastcuda/runtime.h` | C | 设备查询 |
+| `fastcuda/runtime.hpp` | C++ | 设备查询与格式化 |
+| `fastcuda/fastcuda.h` | C | 总头文件 |
+| `fastcuda/fastcuda.hpp` | C++ | 总头文件 |
 
-## 适用场景
+## 构建产物
 
-FastCuda 适合以下需求：
+- `fastcuda.dll` / `libfastcuda.so` — 动态库
+- `fastcuda_static` — 静态库
+- `fastcuda_bench` — 基准测试（链接 cuBLAS）
+- `fastcuda_gemm_example` — GEMM 示例
+- `fastcuda_reduce_example` — Reduce 示例
+- `fastcuda_python` — Python 模块（需 `FASTCUDA_BUILD_PYTHON=ON`）
 
-- 想分阶段学习 CUDA GEMM 优化
-- 想构建一个 ABI 边界清晰的小型 CUDA 库
-- 想在不引入大型框架的前提下做 kernel benchmark
-- 想用简单 reference 实现校验结果正确性
-- 想把 benchmark、profiling、环境检查集中在一个仓库里维护
+## 项目结构
+
+```text
+.
+├── include/fastcuda/   # 公开 C/C++ 头文件
+├── src/
+│   ├── gemm/           # 6 个 GEMM 内核 + API 分发
+│   ├── reduce/         # 8 个 reduce 内核 + API 分发
+│   ├── runtime/        # 设备查询
+│   └── common/         # 内部辅助工具
+├── python/             # pybind11 绑定
+├── examples/           # GEMM 和 reduce 示例
+├── benchmarks/         # 基准测试（cuBLAS 对比）
+├── docs/               # 优化指南（中英文）
+├── scripts/            # 构建、测试、分析辅助脚本
+├── configs/            # 设备配置、benchmark 默认值
+└── templates/          # 报告模板
+```
+
+## 计划中
+
+以下算子已规划但暂未实现：
+
+- GEMV（矩阵-向量乘法）
+- SpMM（稀疏×稠密矩阵乘法）
+- SpMV（稀疏矩阵-向量乘法）
+- FlashAttention
 
 ## 环境要求
 
-- Windows 或 Linux 主机
-- CMake `>= 3.24`
-- CUDA Toolkit `12.8.x` 或 `13.0.x`
-- 与配置架构匹配的 NVIDIA GPU，默认值为 `89;120`
+- Windows 或 Linux
+- CMake ≥ 3.24
+- CUDA Toolkit 12.8.x 或 13.0.x
+- 支持 `sm_89` 或 `sm_120` 的 NVIDIA GPU（可配置）
+- cuBLAS（用于基准测试对比）
+- pybind11（可选，用于 Python 绑定）
 
 ## 常见问题
 
-### 支持哪些平台？
+### 支持 FP16 和 Tensor Core 吗？
 
-当前构建系统支持 Windows 和 Linux。
+支持。V5 使用 TF32 Tensor Core，V6 实现完整的 FP16 HGEMM（通过 `nvcuda::wmma`）。
 
-### 支持哪些 CUDA 版本？
+### 如何与 cuBLAS 对比？
 
-当前 CMake 配置接受 CUDA `12.8.x` 和 `13.0.x`。
-
-### 现在支持 FP16、BF16 或 Tensor Core 吗？
-
-还不支持。目前对外提供的是 FP32 SGEMM 路径。
-
-### 如何一次比较全部 GEMM 实现？
-
-使用 benchmark 包装脚本并传入 `-Kernel all`，或者直接运行 `fastcuda_gemm_example`。
-
-### 三种 GEMM 实现有什么区别？
-
-`naive` 是以正确性为主的基线版本，`tiled_shared` 增加了共享内存分块，`register_blocked` 进一步增加了更大的宏块和每线程寄存器分块。
+运行 `fastcuda_bench gemm all ...` — 会自动包含 cuBLAS SGEMM 基线并输出 GFLOPS 对比。
 
 ### 环境检查和性能分析脚本在哪里？
 
 环境检查脚本在 `scripts/env`，benchmark 和 profiling 包装脚本在 `scripts/perf`，辅助 hook 在 `scripts/hooks`。
-
-## 仓库结构
-
-```text
-.
-|-- AGENTS.md
-|-- benchmarks/
-|-- configs/
-|-- docs/
-|-- examples/
-|-- scripts/
-|-- src/
-`-- templates/
-```
 
 ## 贡献
 
@@ -195,7 +183,9 @@ FastCuda 适合以下需求：
 
 ## 更多文档
 
+- [GEMM 优化指南](docs/gemm_optimization.zh-CN.md) / [English](docs/gemm_optimization.md)
+- [Reduce 优化指南](docs/reduce_optimization.zh-CN.md) / [English](docs/reduce_optimization.md)
+- [Architecture](docs/architecture.md)
+- [Agent Workflow](docs/agent-workflow.md)
 - [AGENTS.md](AGENTS.md)
-- [docs/architecture.md](docs/architecture.md)
-- [docs/agent-workflow.md](docs/agent-workflow.md)
 - [docs/codex-configuration.md](docs/codex-configuration.md)
