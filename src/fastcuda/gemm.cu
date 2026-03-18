@@ -8,9 +8,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace fastcuda {
-
-namespace detail {
+namespace {
 
 thread_local std::string g_last_error_message;
 
@@ -28,7 +26,7 @@ cudaStream_t ToCudaStream(void* stream) {
     return reinterpret_cast<cudaStream_t>(stream);
 }
 
-void ValidateConfig(const GemmConfig& config) {
+void ValidateConfig(const fastcuda::GemmConfig& config) {
     if (config.m <= 0 || config.n <= 0 || config.k <= 0) {
         throw std::invalid_argument("GEMM dimensions must be positive");
     }
@@ -37,21 +35,21 @@ void ValidateConfig(const GemmConfig& config) {
     }
 }
 
-GemmAlgorithm ToCppAlgorithm(FastCudaGemmAlgorithm algorithm) {
+fastcuda::GemmAlgorithm ToCppAlgorithm(FastCudaGemmAlgorithm algorithm) {
     switch (algorithm) {
         case FASTCUDA_GEMM_NAIVE:
-            return GemmAlgorithm::kNaive;
+            return fastcuda::GemmAlgorithm::kNaive;
         case FASTCUDA_GEMM_TILED:
-            return GemmAlgorithm::kTiled;
+            return fastcuda::GemmAlgorithm::kTiled;
         case FASTCUDA_GEMM_REGISTER_BLOCKED:
-            return GemmAlgorithm::kRegisterBlocked;
+            return fastcuda::GemmAlgorithm::kRegisterBlocked;
         default:
             throw std::invalid_argument("Unknown GEMM algorithm");
     }
 }
 
-GemmConfig ToCppConfig(const FastCudaGemmConfig& config) {
-    GemmConfig cpp_config;
+fastcuda::GemmConfig ToCppConfig(const FastCudaGemmConfig& config) {
+    fastcuda::GemmConfig cpp_config;
     cpp_config.m = config.m;
     cpp_config.n = config.n;
     cpp_config.k = config.k;
@@ -239,15 +237,15 @@ __global__ void RegisterBlockedSgemmKernel(
 }
 
 void LaunchKernel(
-    GemmAlgorithm algorithm,
-    const GemmConfig& config,
+    fastcuda::GemmAlgorithm algorithm,
+    const fastcuda::GemmConfig& config,
     const float* a_device,
     const float* b_device,
     float* c_device) {
     const cudaStream_t stream = ToCudaStream(config.stream);
 
     switch (algorithm) {
-        case GemmAlgorithm::kNaive: {
+        case fastcuda::GemmAlgorithm::kNaive: {
             const dim3 block(16, 16);
             const dim3 grid(
                 CeilDiv(config.n, static_cast<int>(block.x)),
@@ -266,7 +264,7 @@ void LaunchKernel(
                 config.beta);
             break;
         }
-        case GemmAlgorithm::kTiled: {
+        case fastcuda::GemmAlgorithm::kTiled: {
             const dim3 block(16, 16);
             const dim3 grid(
                 CeilDiv(config.n, 16),
@@ -285,7 +283,7 @@ void LaunchKernel(
                 config.beta);
             break;
         }
-        case GemmAlgorithm::kRegisterBlocked: {
+        case fastcuda::GemmAlgorithm::kRegisterBlocked: {
             const dim3 block(16, 16);
             const dim3 grid(
                 CeilDiv(config.n, 64),
@@ -322,7 +320,9 @@ FastCudaStatus HandleCError(const std::exception& ex) {
     return FASTCUDA_STATUS_INTERNAL_ERROR;
 }
 
-}  // namespace detail
+}  // namespace
+
+namespace fastcuda {
 
 const char* GemmAlgorithmName(GemmAlgorithm algorithm) {
     switch (algorithm) {
@@ -343,12 +343,12 @@ void LaunchSgemmDevice(
     const float* a_device,
     const float* b_device,
     float* c_device) {
-    detail::ValidateConfig(config);
+    ValidateConfig(config);
     if (a_device == NULL || b_device == NULL || c_device == NULL) {
         throw std::invalid_argument("Device pointers must be non-null");
     }
 
-    detail::LaunchKernel(algorithm, config, a_device, b_device, c_device);
+    LaunchKernel(algorithm, config, a_device, b_device, c_device);
 }
 
 GemmTiming BenchmarkSgemmDevice(
@@ -359,7 +359,7 @@ GemmTiming BenchmarkSgemmDevice(
     float* c_device,
     int warmup_iterations,
     int timed_iterations) {
-    detail::ValidateConfig(config);
+    ValidateConfig(config);
     if (a_device == NULL || b_device == NULL || c_device == NULL) {
         throw std::invalid_argument("Device pointers must be non-null");
     }
@@ -367,26 +367,26 @@ GemmTiming BenchmarkSgemmDevice(
         throw std::invalid_argument("warmup_iterations must be >= 0 and timed_iterations must be > 0");
     }
 
-    const cudaStream_t stream = detail::ToCudaStream(config.stream);
+    const cudaStream_t stream = ToCudaStream(config.stream);
     cudaEvent_t start = NULL;
     cudaEvent_t stop = NULL;
     GemmTiming timing;
 
-    detail::CheckCuda(cudaEventCreate(&start), "cudaEventCreate(start)");
-    detail::CheckCuda(cudaEventCreate(&stop), "cudaEventCreate(stop)");
+    CheckCuda(cudaEventCreate(&start), "cudaEventCreate(start)");
+    CheckCuda(cudaEventCreate(&stop), "cudaEventCreate(stop)");
 
     try {
         for (int iteration = 0; iteration < warmup_iterations; ++iteration) {
-            detail::LaunchKernel(algorithm, config, a_device, b_device, c_device);
+            LaunchKernel(algorithm, config, a_device, b_device, c_device);
         }
 
-        detail::CheckCuda(cudaEventRecord(start, stream), "cudaEventRecord(start)");
+        CheckCuda(cudaEventRecord(start, stream), "cudaEventRecord(start)");
         for (int iteration = 0; iteration < timed_iterations; ++iteration) {
-            detail::LaunchKernel(algorithm, config, a_device, b_device, c_device);
+            LaunchKernel(algorithm, config, a_device, b_device, c_device);
         }
-        detail::CheckCuda(cudaEventRecord(stop, stream), "cudaEventRecord(stop)");
-        detail::CheckCuda(cudaEventSynchronize(stop), "cudaEventSynchronize(stop)");
-        detail::CheckCuda(cudaEventElapsedTime(&timing.elapsed_ms, start, stop), "cudaEventElapsedTime");
+        CheckCuda(cudaEventRecord(stop, stream), "cudaEventRecord(stop)");
+        CheckCuda(cudaEventSynchronize(stop), "cudaEventSynchronize(stop)");
+        CheckCuda(cudaEventElapsedTime(&timing.elapsed_ms, start, stop), "cudaEventElapsedTime");
         timing.elapsed_ms /= static_cast<float>(timed_iterations);
     } catch (...) {
         cudaEventDestroy(start);
@@ -394,8 +394,8 @@ GemmTiming BenchmarkSgemmDevice(
         throw;
     }
 
-    detail::CheckCuda(cudaEventDestroy(start), "cudaEventDestroy(start)");
-    detail::CheckCuda(cudaEventDestroy(stop), "cudaEventDestroy(stop)");
+    CheckCuda(cudaEventDestroy(start), "cudaEventDestroy(start)");
+    CheckCuda(cudaEventDestroy(stop), "cudaEventDestroy(stop)");
     return timing;
 }
 
@@ -408,7 +408,7 @@ GemmTiming RunSgemmHost(
     float* c_output_host,
     int warmup_iterations,
     int timed_iterations) {
-    detail::ValidateConfig(config);
+    ValidateConfig(config);
     if (a_host == NULL || b_host == NULL || c_output_host == NULL) {
         throw std::invalid_argument("Host pointers for A, B and output C must be non-null");
     }
@@ -421,18 +421,18 @@ GemmTiming RunSgemmHost(
     float* b_device = NULL;
     float* c_device = NULL;
 
-    detail::CheckCuda(cudaMalloc(&a_device, a_bytes), "cudaMalloc(A)");
-    detail::CheckCuda(cudaMalloc(&b_device, b_bytes), "cudaMalloc(B)");
-    detail::CheckCuda(cudaMalloc(&c_device, c_bytes), "cudaMalloc(C)");
+    CheckCuda(cudaMalloc(&a_device, a_bytes), "cudaMalloc(A)");
+    CheckCuda(cudaMalloc(&b_device, b_bytes), "cudaMalloc(B)");
+    CheckCuda(cudaMalloc(&c_device, c_bytes), "cudaMalloc(C)");
 
     try {
-        detail::CheckCuda(cudaMemcpy(a_device, a_host, a_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(A)");
-        detail::CheckCuda(cudaMemcpy(b_device, b_host, b_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(B)");
+        CheckCuda(cudaMemcpy(a_device, a_host, a_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(A)");
+        CheckCuda(cudaMemcpy(b_device, b_host, b_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(B)");
 
         if (c_input_host != NULL) {
-            detail::CheckCuda(cudaMemcpy(c_device, c_input_host, c_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(C input)");
+            CheckCuda(cudaMemcpy(c_device, c_input_host, c_bytes, cudaMemcpyHostToDevice), "cudaMemcpy(C input)");
         } else {
-            detail::CheckCuda(cudaMemset(c_device, 0, c_bytes), "cudaMemset(C)");
+            CheckCuda(cudaMemset(c_device, 0, c_bytes), "cudaMemset(C)");
         }
 
         GemmTiming timing = BenchmarkSgemmDevice(
@@ -444,7 +444,7 @@ GemmTiming RunSgemmHost(
             warmup_iterations,
             timed_iterations);
 
-        detail::CheckCuda(cudaMemcpy(c_output_host, c_device, c_bytes, cudaMemcpyDeviceToHost), "cudaMemcpy(C output)");
+        CheckCuda(cudaMemcpy(c_output_host, c_device, c_bytes, cudaMemcpyDeviceToHost), "cudaMemcpy(C output)");
 
         cudaFree(a_device);
         cudaFree(b_device);
@@ -464,7 +464,7 @@ void ReferenceSgemm(
     const float* b_host,
     const float* c_input_host,
     float* c_output_host) {
-    detail::ValidateConfig(config);
+    ValidateConfig(config);
     if (a_host == NULL || b_host == NULL || c_output_host == NULL) {
         throw std::invalid_argument("Host pointers for A, B and output C must be non-null");
     }
@@ -496,6 +496,8 @@ float MaxAbsDiff(const float* lhs, const float* rhs, std::size_t element_count) 
 
 }  // namespace fastcuda
 
+extern "C" {
+
 const char* fastcudaGetStatusString(FastCudaStatus status) {
     switch (status) {
         case FASTCUDA_STATUS_SUCCESS:
@@ -512,12 +514,12 @@ const char* fastcudaGetStatusString(FastCudaStatus status) {
 }
 
 const char* fastcudaGetLastErrorMessage(void) {
-    return fastcuda::detail::g_last_error_message.c_str();
+    return g_last_error_message.c_str();
 }
 
 const char* fastcudaGetGemmAlgorithmName(FastCudaGemmAlgorithm algorithm) {
     try {
-        return fastcuda::GemmAlgorithmName(fastcuda::detail::ToCppAlgorithm(algorithm));
+        return fastcuda::GemmAlgorithmName(ToCppAlgorithm(algorithm));
     } catch (...) {
         return "unknown";
     }
@@ -533,15 +535,15 @@ FastCudaStatus fastcudaSgemmDevice(
     int timed_iterations,
     float* elapsed_ms) {
     if (config == NULL || elapsed_ms == NULL) {
-        fastcuda::detail::SetLastErrorMessage("Config and elapsed_ms must be non-null");
+        SetLastErrorMessage("Config and elapsed_ms must be non-null");
         return FASTCUDA_STATUS_INVALID_VALUE;
     }
 
     try {
-        fastcuda::detail::SetLastErrorMessage("");
+        SetLastErrorMessage("");
         const fastcuda::GemmTiming timing = fastcuda::BenchmarkSgemmDevice(
-            fastcuda::detail::ToCppAlgorithm(algorithm),
-            fastcuda::detail::ToCppConfig(*config),
+            ToCppAlgorithm(algorithm),
+            ToCppConfig(*config),
             a_device,
             b_device,
             c_device,
@@ -550,7 +552,7 @@ FastCudaStatus fastcudaSgemmDevice(
         *elapsed_ms = timing.elapsed_ms;
         return FASTCUDA_STATUS_SUCCESS;
     } catch (const std::exception& ex) {
-        return fastcuda::detail::HandleCError(ex);
+        return HandleCError(ex);
     }
 }
 
@@ -565,15 +567,15 @@ FastCudaStatus fastcudaSgemmHost(
     int timed_iterations,
     float* elapsed_ms) {
     if (config == NULL || elapsed_ms == NULL) {
-        fastcuda::detail::SetLastErrorMessage("Config and elapsed_ms must be non-null");
+        SetLastErrorMessage("Config and elapsed_ms must be non-null");
         return FASTCUDA_STATUS_INVALID_VALUE;
     }
 
     try {
-        fastcuda::detail::SetLastErrorMessage("");
+        SetLastErrorMessage("");
         const fastcuda::GemmTiming timing = fastcuda::RunSgemmHost(
-            fastcuda::detail::ToCppAlgorithm(algorithm),
-            fastcuda::detail::ToCppConfig(*config),
+            ToCppAlgorithm(algorithm),
+            ToCppConfig(*config),
             a_host,
             b_host,
             c_input_host,
@@ -583,6 +585,8 @@ FastCudaStatus fastcudaSgemmHost(
         *elapsed_ms = timing.elapsed_ms;
         return FASTCUDA_STATUS_SUCCESS;
     } catch (const std::exception& ex) {
-        return fastcuda::detail::HandleCError(ex);
+        return HandleCError(ex);
     }
 }
+
+}  // extern "C"
