@@ -8,6 +8,15 @@ development, with a near-term focus on:
 - benchmarking and regression tracking
 - performance analysis and environment inspection
 
+The repository now exports a handwritten SGEMM library with three speed tiers:
+
+- `naive`: one thread computes one output element
+- `tiled_shared`: shared-memory tiling over `16x16x16`
+- `register_blocked`: `64x64x16` macro tile with `4x4` per-thread register blocking
+
+These kernels are exposed through both a C++ API and a C ABI so other software
+can call the shared library directly.
+
 ## Build Targets
 
 - build system: CMake
@@ -76,8 +85,26 @@ cmake --build build -j
 ### Benchmark Wrapper
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/perf/run-benchmark.ps1 -Operator gemm -Kernel baseline
+powershell -ExecutionPolicy Bypass -File scripts/perf/run-benchmark.ps1 -Operator gemm -Kernel baseline -Shape m=1024,n=1024,k=1024 -DType fp32
 ```
+
+### Example Executable
+
+After building, validate all three GEMM kernels with:
+
+```powershell
+.\build\Release\fastcuda_gemm_example.exe 512 512 512
+```
+
+On Linux, the shared target is `libfastcuda.so`; on Windows, it is
+`fastcuda.dll`. The install step places headers in `include/fastcuda` and the
+library in `lib`.
+
+### Exported Headers
+
+- `fastcuda/gemm.hpp`: C++ SGEMM API
+- `fastcuda/gemm_c.h`: C ABI for external software
+- `fastcuda/runtime.hpp`: device query utilities
 
 See [docs/architecture.md](E:/learning/cuda/FastCuda/docs/architecture.md),
 [docs/agent-workflow.md](E:/learning/cuda/FastCuda/docs/agent-workflow.md),

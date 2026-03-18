@@ -28,3 +28,9 @@ prefix_rule(
         "apt-cache policy cuda-toolkit",
     ],
 )
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Hard reset is blocked. Use non-destructive git inspection instead.",
+)

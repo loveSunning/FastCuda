@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fastcuda/export.hpp"
+
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -15,7 +17,7 @@ struct DeviceInfo {
     int multiprocessor_count;
 };
 
-std::vector<DeviceInfo> QueryDevices();
-std::string FormatDeviceSummary(const std::vector<DeviceInfo>& devices);
+FASTCUDA_API std::vector<DeviceInfo> QueryDevices();
+FASTCUDA_API std::string FormatDeviceSummary(const std::vector<DeviceInfo>& devices);
 
 }  // namespace fastcuda

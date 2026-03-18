@@ -3,6 +3,7 @@ build/
 build-*/
 dist/
 out/
+package/
 *.ncu-rep
 *.nsys-rep
 *.sqlite

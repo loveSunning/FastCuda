@@ -43,10 +43,24 @@ configure_file(
     @ONLY
 )
 
-add_library(fastcuda STATIC
+set(FASTCUDA_SOURCES
+    src/fastcuda/gemm.cu
     src/fastcuda/runtime.cu
 )
 
+set(FASTCUDA_PUBLIC_HEADERS
+    src/fastcuda/export.hpp
+    src/fastcuda/gemm.hpp
+    src/fastcuda/gemm_c.h
+    src/fastcuda/runtime.hpp
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/fastcuda/version.hpp
+)
+
+add_library(fastcuda SHARED
+    ${FASTCUDA_SOURCES}
+)
+
+target_compile_definitions(fastcuda PRIVATE FASTCUDA_BUILD_SHARED)
 target_include_directories(fastcuda
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -64,6 +78,28 @@ set_target_properties(fastcuda PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
+add_library(fastcuda_static STATIC
+    ${FASTCUDA_SOURCES}
+)
+
+target_include_directories(fastcuda_static
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
+target_link_libraries(fastcuda_static
+    PUBLIC
+        CUDA::cudart
+)
+
+target_compile_features(fastcuda_static PUBLIC cxx_std_11)
+set_target_properties(fastcuda_static PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+    OUTPUT_NAME fastcuda_static
+)
+
 add_executable(fastcuda_bench
     benchmarks/bench_main.cu
 )
@@ -72,6 +108,23 @@ target_link_libraries(fastcuda_bench PRIVATE fastcuda)
 target_compile_features(fastcuda_bench PRIVATE cxx_std_11)
 set_target_properties(fastcuda_bench PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
+)
+
+add_executable(fastcuda_gemm_example
+    examples/gemm_example.cpp
+)
+
+target_link_libraries(fastcuda_gemm_example PRIVATE fastcuda)
+target_compile_features(fastcuda_gemm_example PRIVATE cxx_std_11)
+
+install(TARGETS fastcuda fastcuda_static fastcuda_bench fastcuda_gemm_example
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+install(FILES ${FASTCUDA_PUBLIC_HEADERS}
+    DESTINATION include/fastcuda
 )
 
 message(STATUS "FastCuda host platform: ${CMAKE_SYSTEM_NAME}")
