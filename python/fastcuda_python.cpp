@@ -16,6 +16,7 @@
 #include "fastcuda/reduce.hpp"
 #include "fastcuda/runtime.hpp"
 
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <cstring>
 #include <stdexcept>
@@ -66,6 +67,42 @@ py::dict run_sgemm(int algo_int, int m, int n, int k,
     return result;
 }
 
+py::dict run_hgemm(int m, int n, int k,
+                   py::array a,
+                   py::array b,
+                   float alpha, float beta,
+                   int warmup, int timed) {
+    auto abuf = a.request();
+    auto bbuf = b.request();
+    if (abuf.itemsize != 2 || bbuf.itemsize != 2)
+        throw std::invalid_argument("hgemm expects float16 arrays");
+    if (abuf.size < (size_t)m * k || bbuf.size < (size_t)k * n)
+        throw std::invalid_argument("input array too small");
+
+    fastcuda::GemmConfig cfg;
+    cfg.m = m; cfg.n = n; cfg.k = k;
+    cfg.lda = k; cfg.ldb = n; cfg.ldc = n;
+    cfg.alpha = alpha; cfg.beta = beta;
+
+    std::vector<float> c_out((size_t)m * n, 0.0f);
+    fastcuda::GemmTiming t = fastcuda::RunHgemmHost(
+        cfg,
+        abuf.ptr,
+        bbuf.ptr,
+        NULL,
+        c_out.data(),
+        warmup,
+        timed);
+
+    py::array_t<float> c_arr({m, n});
+    std::memcpy(c_arr.mutable_data(), c_out.data(), c_out.size() * sizeof(float));
+
+    py::dict result;
+    result["C"] = c_arr;
+    result["elapsed_ms"] = t.elapsed_ms;
+    return result;
+}
+
 /* Run a full Reduce on host numpy array (FP32). */
 py::dict run_reduce(int algo_int, py::array_t<float> input,
                     int warmup, int timed) {
@@ -93,7 +130,7 @@ py::dict run_reduce(int algo_int, py::array_t<float> input,
 }  // anonymous namespace
 
 PYBIND11_MODULE(fastcuda_python, m) {
-    m.doc() = "FastCuda Python bindings – CUDA operators for GEMM and Reduce";
+    m.doc() = "FastCuda Python bindings - CUDA operators for GEMM and Reduce";
 
     /* ---- Enums ---- */
     py::enum_<fastcuda::GemmAlgorithm>(m, "GemmAlgorithm")
@@ -126,7 +163,7 @@ PYBIND11_MODULE(fastcuda_python, m) {
         .def_readonly("multiprocessor_count", &fastcuda::DeviceInfo::multiprocessor_count);
 
     m.def("query_devices", &fastcuda::QueryDevices,
-          "Return a list of CUDA device info structs.");
+            "Return a list of CUDA device info structs.");
 
     /* ---- GEMM ---- */
     m.def("sgemm", &run_sgemm,
@@ -134,21 +171,28 @@ PYBIND11_MODULE(fastcuda_python, m) {
           py::arg("A"), py::arg("B"),
           py::arg("alpha") = 1.0f, py::arg("beta") = 0.0f,
           py::arg("warmup") = 5, py::arg("timed") = 20,
-          "Run SGEMM (FP32) on host arrays. Returns dict with 'C' and 'elapsed_ms'.");
+            "Run SGEMM (FP32) on host arrays. Returns dict with C and elapsed_ms.");
+
+        m.def("hgemm", &run_hgemm,
+            py::arg("m"), py::arg("n"), py::arg("k"),
+            py::arg("A"), py::arg("B"),
+            py::arg("alpha") = 1.0f, py::arg("beta") = 0.0f,
+            py::arg("warmup") = 5, py::arg("timed") = 20,
+                "Run HGEMM (FP16 input, FP32 output) on host arrays. Returns dict with C and elapsed_ms.");
 
     m.def("gemm_algorithm_name",
           [](int a) { return fastcuda::GemmAlgorithmName(
               static_cast<fastcuda::GemmAlgorithm>(a)); },
-          "Return human-readable name for a GEMM algorithm.");
+          "Return human readable name for a GEMM algorithm.");
 
     /* ---- Reduce ---- */
     m.def("reduce_sum", &run_reduce,
           py::arg("algo"), py::arg("input"),
           py::arg("warmup") = 5, py::arg("timed") = 20,
-          "Run reduce-sum on a host FP32 array. Returns dict with 'sum' and 'elapsed_ms'.");
+            "Run reduce sum on a host FP32 array. Returns dict with sum and elapsed_ms.");
 
     m.def("reduce_algorithm_name",
           [](int a) { return fastcuda::ReduceAlgorithmName(
               static_cast<fastcuda::ReduceAlgorithm>(a)); },
-          "Return human-readable name for a Reduce algorithm.");
+          "Return human readable name for a Reduce algorithm.");
 }

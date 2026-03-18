@@ -45,27 +45,43 @@ cmake --build build --config Release -j
 # GEMM 示例（运行 V1–V5 并与 CPU 参考实现对比）
 ./build/Release/fastcuda_gemm_example 512 512 512
 
+# HGEMM 示例（FP16 输入，FP32 输出）
+./build/Release/fastcuda_hgemm_example 512 512 512
+
 # Reduce 示例（运行 V0–V7）
 ./build/Release/fastcuda_reduce_example 1048576
 
 # 基准测试（GEMM vs cuBLAS + 全部 reduce 版本）
-./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024
+./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024 fp32
+./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024 fp16
 ./build/Release/fastcuda_bench reduce all n=1048576
 ```
 
 ### 4. Python（可选）
 
 ```bash
-cmake -S . -B build -DFASTCUDA_BUILD_PYTHON=ON
-cmake --build build --config Release -j
-cd python && pip install -e .
+cmake -S . -B build-py -DFASTCUDA_BUILD_PYTHON=ON \
+	-Dpybind11_DIR="<你的-python-site-packages>/pybind11/share/cmake/pybind11"
+cmake --build build-py --config Release -j
 ```
 
 ```python
-import fastcuda
-info = fastcuda.query_devices()
-C = fastcuda.sgemm(A, B, algorithm=fastcuda.GemmAlgorithm.REGISTER_BLOCKED_V3)
-total = fastcuda.reduce_sum(data, algorithm=fastcuda.ReduceAlgorithm.SHUFFLE_V7)
+import numpy as np
+import os
+import sys
+
+sys.path.append("build-py/Release")
+os.add_dll_directory(r"build-py/Release")
+
+import fastcuda_python as fc
+
+devices = fc.query_devices()
+a = np.arange(64, dtype=np.float32).reshape(8, 8) / 32
+b = np.arange(64, dtype=np.float32).reshape(8, 8) / 64
+
+sgemm = fc.sgemm(int(fc.GemmAlgorithm.NaiveV1), 8, 8, 8, a, b)
+hgemm = fc.hgemm(8, 8, 8, a.astype(np.float16), b.astype(np.float16))
+reduced = fc.reduce_sum(int(fc.ReduceAlgorithm.BaselineV0), a.reshape(-1))
 ```
 
 ## GEMM 实现
@@ -115,6 +131,7 @@ total = fastcuda.reduce_sum(data, algorithm=fastcuda.ReduceAlgorithm.SHUFFLE_V7)
 - `fastcuda_static` — 静态库
 - `fastcuda_bench` — 基准测试（链接 cuBLAS）
 - `fastcuda_gemm_example` — GEMM 示例
+- `fastcuda_hgemm_example` — HGEMM 示例
 - `fastcuda_reduce_example` — Reduce 示例
 - `fastcuda_python` — Python 模块（需 `FASTCUDA_BUILD_PYTHON=ON`）
 
@@ -163,7 +180,7 @@ total = fastcuda.reduce_sum(data, algorithm=fastcuda.ReduceAlgorithm.SHUFFLE_V7)
 
 ### 如何与 cuBLAS 对比？
 
-运行 `fastcuda_bench gemm all ...` — 会自动包含 cuBLAS SGEMM 基线并输出 GFLOPS 对比。
+运行 `fastcuda_bench gemm all ... fp32` 可比较 SGEMM/TF32 与 cuBLAS SGEMM，运行 `fastcuda_bench gemm all ... fp16` 可比较 HGEMM 与 cuBLAS HGEMM。
 
 ### 环境检查和性能分析脚本在哪里？
 

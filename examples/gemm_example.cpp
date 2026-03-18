@@ -19,7 +19,7 @@ namespace {
 
 void FillMatrix(std::vector<float>* v, float scale) {
     for (std::size_t i = 0; i < v->size(); ++i)
-        (*v)[i] = static_cast<float>((i % 19) - 9) * scale;
+    (*v)[i] = static_cast<float>(static_cast<int>(i % 19) - 9) * scale;
 }
 
 void RunOne(fastcuda::GemmAlgorithm algo,
@@ -73,6 +73,6 @@ int main(int argc, char** argv) {
     /* TF32 v5 – note: result will differ slightly due to TF32 precision */
     RunOne(fastcuda::GemmAlgorithm::kTF32V5,       cfg, a, b, c_ref);
 
-    std::cout << "\n(HGEMM v6 requires FP16 input – see bench_main for full run)\n";
+    std::cout << "\n(HGEMM v6 requires FP16 input - run fastcuda_hgemm_example for a dedicated test)\n";
     return 0;
 }

@@ -103,6 +103,15 @@ FASTCUDA_API GemmTiming RunSgemmHost(
     int warmup_iters,
     int timed_iters);
 
+FASTCUDA_API GemmTiming RunHgemmHost(
+    const GemmConfig& config,
+    const void* a_host,
+    const void* b_host,
+    const float* c_input_host,
+    float* c_output_host,
+    int warmup_iters,
+    int timed_iters);
+
 /* CPU reference SGEMM for validation */
 FASTCUDA_API void ReferenceSgemm(
     const GemmConfig& config,

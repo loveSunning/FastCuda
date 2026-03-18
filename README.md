@@ -45,27 +45,43 @@ cmake --build build --config Release -j
 # GEMM example (runs V1–V5 with CPU reference check)
 ./build/Release/fastcuda_gemm_example 512 512 512
 
+# HGEMM example (FP16 input, FP32 output)
+./build/Release/fastcuda_hgemm_example 512 512 512
+
 # Reduce example (runs V0–V7)
 ./build/Release/fastcuda_reduce_example 1048576
 
 # Benchmark (GEMM vs cuBLAS + all reduce versions)
-./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024
+./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024 fp32
+./build/Release/fastcuda_bench gemm all m=1024,n=1024,k=1024 fp16
 ./build/Release/fastcuda_bench reduce all n=1048576
 ```
 
 ### 4. Python (optional)
 
 ```bash
-cmake -S . -B build -DFASTCUDA_BUILD_PYTHON=ON
-cmake --build build --config Release -j
-cd python && pip install -e .
+cmake -S . -B build-py -DFASTCUDA_BUILD_PYTHON=ON \
+	-Dpybind11_DIR="<your-python-site-packages>/pybind11/share/cmake/pybind11"
+cmake --build build-py --config Release -j
 ```
 
 ```python
-import fastcuda
-info = fastcuda.query_devices()
-C = fastcuda.sgemm(A, B, algorithm=fastcuda.GemmAlgorithm.REGISTER_BLOCKED_V3)
-total = fastcuda.reduce_sum(data, algorithm=fastcuda.ReduceAlgorithm.SHUFFLE_V7)
+import numpy as np
+import os
+import sys
+
+sys.path.append("build-py/Release")
+os.add_dll_directory(r"build-py/Release")
+
+import fastcuda_python as fc
+
+devices = fc.query_devices()
+a = np.arange(64, dtype=np.float32).reshape(8, 8) / 32
+b = np.arange(64, dtype=np.float32).reshape(8, 8) / 64
+
+sgemm = fc.sgemm(int(fc.GemmAlgorithm.NaiveV1), 8, 8, 8, a, b)
+hgemm = fc.hgemm(8, 8, 8, a.astype(np.float16), b.astype(np.float16))
+reduced = fc.reduce_sum(int(fc.ReduceAlgorithm.BaselineV0), a.reshape(-1))
 ```
 
 ## GEMM Implementations
@@ -115,6 +131,7 @@ See [docs/reduce_optimization.md](docs/reduce_optimization.md) for the full opti
 - `fastcuda_static` — static library
 - `fastcuda_bench` — benchmark executable (links cuBLAS)
 - `fastcuda_gemm_example` — GEMM example
+- `fastcuda_hgemm_example` — HGEMM example
 - `fastcuda_reduce_example` — Reduce example
 - `fastcuda_python` — Python module (when `FASTCUDA_BUILD_PYTHON=ON`)
 
@@ -163,7 +180,7 @@ Yes. V5 uses TF32 Tensor Cores and V6 implements full FP16 HGEMM via `nvcuda::wm
 
 ### How do I compare against cuBLAS?
 
-Run `fastcuda_bench gemm all ...` — it automatically includes a cuBLAS SGEMM baseline with GFLOPS comparison.
+Run `fastcuda_bench gemm all ... fp32` for SGEMM/TF32 vs cuBLAS SGEMM, or `fastcuda_bench gemm all ... fp16` for HGEMM vs cuBLAS HGEMM.
 
 ### Where do profiling and environment scripts live?
 

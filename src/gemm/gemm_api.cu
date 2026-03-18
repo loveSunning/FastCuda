@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cuda_fp16.h>
 #include <stdexcept>
 #include <string>
 
@@ -239,6 +240,37 @@ GemmTiming RunSgemmHost(GemmAlgorithm algo, const GemmConfig& cfg,
         internal::CheckCuda(cudaMemset(dC, 0, c_bytes), "memset C");
 
     GemmTiming t = BenchmarkSgemm(algo, cfg, dA, dB, dC, warmup, timed);
+    internal::CheckCuda(cudaMemcpy(c_out, dC, c_bytes, cudaMemcpyDeviceToHost), "D2H C");
+
+    cudaFree(dA);
+    cudaFree(dB);
+    cudaFree(dC);
+    return t;
+}
+
+GemmTiming RunHgemmHost(const GemmConfig& cfg,
+                        const void* a_host, const void* b_host,
+                        const float* c_in, float* c_out,
+                        int warmup, int timed) {
+    ValidateConfig(cfg);
+    const std::size_t a_bytes = (std::size_t)cfg.m * cfg.lda * sizeof(half);
+    const std::size_t b_bytes = (std::size_t)cfg.k * cfg.ldb * sizeof(half);
+    const std::size_t c_bytes = (std::size_t)cfg.m * cfg.ldc * sizeof(float);
+
+    half *dA = NULL, *dB = NULL;
+    float* dC = NULL;
+    internal::CheckCuda(cudaMalloc(&dA, a_bytes), "malloc A");
+    internal::CheckCuda(cudaMalloc(&dB, b_bytes), "malloc B");
+    internal::CheckCuda(cudaMalloc(&dC, c_bytes), "malloc C");
+
+    internal::CheckCuda(cudaMemcpy(dA, a_host, a_bytes, cudaMemcpyHostToDevice), "H2D A");
+    internal::CheckCuda(cudaMemcpy(dB, b_host, b_bytes, cudaMemcpyHostToDevice), "H2D B");
+    if (c_in)
+        internal::CheckCuda(cudaMemcpy(dC, c_in, c_bytes, cudaMemcpyHostToDevice), "H2D C");
+    else
+        internal::CheckCuda(cudaMemset(dC, 0, c_bytes), "memset C");
+
+    GemmTiming t = BenchmarkHgemm(cfg, dA, dB, dC, warmup, timed);
     internal::CheckCuda(cudaMemcpy(c_out, dC, c_bytes, cudaMemcpyDeviceToHost), "D2H C");
 
     cudaFree(dA);

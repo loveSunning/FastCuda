@@ -137,17 +137,22 @@ endif()
 # ── Examples ────────────────────────────────────────────────────────
 if(FASTCUDA_BUILD_EXAMPLES)
     add_executable(fastcuda_gemm_example   examples/gemm_example.cpp)
+    add_executable(fastcuda_hgemm_example  examples/hgemm_example.cpp)
     add_executable(fastcuda_reduce_example examples/reduce_example.cpp)
 
     target_link_libraries(fastcuda_gemm_example   PRIVATE fastcuda)
+    target_link_libraries(fastcuda_hgemm_example  PRIVATE fastcuda)
     target_link_libraries(fastcuda_reduce_example PRIVATE fastcuda)
 
     target_compile_features(fastcuda_gemm_example   PRIVATE cxx_std_11)
+    target_compile_features(fastcuda_hgemm_example  PRIVATE cxx_std_11)
     target_compile_features(fastcuda_reduce_example PRIVATE cxx_std_11)
 endif()
 
 # ── Python bindings (pybind11) ──────────────────────────────────────
 if(FASTCUDA_BUILD_PYTHON)
+    set(PYBIND11_FINDPYTHON ON)
+    find_package(Python COMPONENTS Interpreter Development REQUIRED)
     find_package(pybind11 CONFIG REQUIRED)
     pybind11_add_module(fastcuda_python python/fastcuda_python.cpp)
     target_link_libraries(fastcuda_python PRIVATE fastcuda)
@@ -160,7 +165,10 @@ if(FASTCUDA_BUILD_BENCH)
     list(APPEND _INSTALL_TARGETS fastcuda_bench)
 endif()
 if(FASTCUDA_BUILD_EXAMPLES)
-    list(APPEND _INSTALL_TARGETS fastcuda_gemm_example fastcuda_reduce_example)
+    list(APPEND _INSTALL_TARGETS
+        fastcuda_gemm_example
+        fastcuda_hgemm_example
+        fastcuda_reduce_example)
 endif()
 
 install(TARGETS ${_INSTALL_TARGETS}

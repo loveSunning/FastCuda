@@ -39,8 +39,10 @@ __global__ void hgemm_v6_kernel(
 {
     __shared__ half As[BM_V6][BK_V6 + 8];   /* pad to avoid bank conflict */
     __shared__ half Bs[BK_V6][BN_V6 + 8];
+    __shared__ float Cscratch[4][4][WM_V6 * WN_V6];
 
     const int warp_id = threadIdx.x / 32;
+    const int lane_id = threadIdx.x % 32;
     const int total_threads = blockDim.x;      /* 128 */
 
     const int block_row = blockIdx.y * BM_V6;
@@ -91,18 +93,26 @@ __global__ void hgemm_v6_kernel(
         int gr = block_row + warp_row;
         int gc = block_col + col_tile * WN_V6;
         if (gr < M && gc < N) {
-            float tmp[WM_V6 * WN_V6];
-            wmma::store_matrix_sync(tmp, c_frag[col_tile],
-                                    WN_V6, wmma::mem_row_major);
-            for (int i = 0; i < WM_V6; ++i) {
-                for (int j = 0; j < WN_V6; ++j) {
-                    int r   = gr + i;
+            if (alpha == 1.0f && beta == 0.0f &&
+                gr + WM_V6 <= M && gc + WN_V6 <= N) {
+                wmma::store_matrix_sync(&C[gr * ldc + gc], c_frag[col_tile],
+                                        ldc, wmma::mem_row_major);
+            } else {
+                float* scratch = &Cscratch[warp_id][col_tile][0];
+                wmma::store_matrix_sync(scratch, c_frag[col_tile],
+                                        WN_V6, wmma::mem_row_major);
+                __syncwarp();
+                for (int idx = lane_id; idx < WM_V6 * WN_V6; idx += 32) {
+                    int i = idx / WN_V6;
+                    int j = idx % WN_V6;
+                    int r = gr + i;
                     int c_j = gc + j;
                     if (r < M && c_j < N) {
-                        C[r * ldc + c_j] = alpha * tmp[i * WN_V6 + j]
-                                         + beta  * C[r * ldc + c_j];
+                        C[r * ldc + c_j] = alpha * scratch[idx]
+                                         + beta * C[r * ldc + c_j];
                     }
                 }
+                __syncwarp();
             }
         }
     }

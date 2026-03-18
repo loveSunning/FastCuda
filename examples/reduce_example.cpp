@@ -19,7 +19,7 @@ namespace {
 
 void FillInput(std::vector<float>* v) {
     for (std::size_t i = 0; i < v->size(); ++i)
-        (*v)[i] = static_cast<float>((i % 7) - 3) * 0.1f;
+    (*v)[i] = static_cast<float>(static_cast<int>(i % 7) - 3) * 0.1f;
 }
 
 void RunOne(fastcuda::ReduceAlgorithm algo,
